@@ -11,3 +11,4 @@ django-allauth
 dj-rest-auth
 requests
 cryptography
+django-heroku
