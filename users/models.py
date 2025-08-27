@@ -9,3 +9,4 @@ class User(AbstractUser):
     )
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='student')
     is_email_verified = models.BooleanField(default=False)
+    bio = models.TextField(null=True, blank=True)
