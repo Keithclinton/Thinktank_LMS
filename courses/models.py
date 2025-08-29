@@ -4,8 +4,7 @@ from django.conf import settings
 class Course(models.Model):
     title = models.CharField(max_length=255)
     slug = models.SlugField(unique=True)
-    short_description = models.CharField(max_length=512, blank=True)
-    full_description = models.TextField(blank=True)
+    description = models.TextField()
     price = models.DecimalField(max_digits=8, decimal_places=2, default=0)
     category = models.CharField(max_length=100, blank=True)
     level = models.CharField(max_length=50, blank=True)
@@ -76,3 +75,12 @@ class QuizResult(models.Model):
     score = models.DecimalField(max_digits=5, decimal_places=2)
     passed = models.BooleanField(default=False)
     taken_at = models.DateTimeField(auto_now_add=True)
+
+class Note(models.Model):
+    course = models.ForeignKey(Course, related_name='notes', on_delete=models.CASCADE)
+    content = models.TextField()
+
+class Video(models.Model):
+    course = models.ForeignKey(Course, related_name='videos', on_delete=models.CASCADE)
+    url = models.URLField()
+    title = models.CharField(max_length=255)
