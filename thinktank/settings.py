@@ -67,16 +67,24 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'thinktank.wsgi.application'
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': os.getenv('DATABASE_NAME', 'thinktank'),
-        'USER': os.getenv('DATABASE_USER', 'thinktank'),
-        'PASSWORD': os.getenv('DATABASE_PASSWORD', 'thinktank_password'),
-        'HOST': os.getenv('DATABASE_HOST', 'db'),
-        'PORT': os.getenv('DATABASE_PORT', '3306'),
+if os.getenv('USE_SQLITE', '1') == '1':
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.mysql',
+            'NAME': os.getenv('DATABASE_NAME', 'thinktank'),
+            'USER': os.getenv('DATABASE_USER', 'thinktank'),
+            'PASSWORD': os.getenv('DATABASE_PASSWORD', 'thinktank_password'),
+            'HOST': os.getenv('DATABASE_HOST', 'db'),
+            'PORT': os.getenv('DATABASE_PORT', '3306'),
+        }
+    }
 
 AUTH_USER_MODEL = 'users.User'
 
@@ -135,12 +143,12 @@ if AWS_STORAGE_BUCKET_NAME:
     DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.yourprovider.com'
+EMAIL_HOST = 'smtp.sendgrid.net'
+EMAIL_HOST_USER = 'apikey'  # This is literally the word 'apikey'
+EMAIL_HOST_PASSWORD = 'YOUR_SENDGRID_API_KEY'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'your@email.com'
-EMAIL_HOST_PASSWORD = 'your_password_or_app_password'
-DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+DEFAULT_FROM_EMAIL = 'your@email.com'
 
 SITE_ID = 1
 
