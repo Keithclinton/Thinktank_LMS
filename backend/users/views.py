@@ -1,89 +1,128 @@
-from rest_framework import generics, permissions
-from django.contrib.auth import get_user_model
-from .serializers import RegisterSerializer, UserSerializer, UserProfileSerializer, PasswordChangeSerializer
+from rest_framework import status, generics
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
-from rest_framework import status
-from django.core.mail import send_mail
-from django.conf import settings
-from django.urls import reverse
-from django.contrib.sites.shortcuts import get_current_site
-from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
-from django.utils.encoding import force_bytes, force_str
-from django.contrib.auth.tokens import default_token_generator
-from rest_framework.views import APIView
+from rest_framework_simplejwt.tokens import RefreshToken
+from django.contrib.auth import update_session_auth_hash, get_user_model
+from courses.models import Enrollment, Progress, Certificate
+from .serializers import (
+    RegisterSerializer, UserSerializer, UserProfileSerializer, 
+    LoginSerializer, PasswordChangeSerializer
+)
 
 User = get_user_model()
 
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
-    permission_classes = (permissions.AllowAny,)
     serializer_class = RegisterSerializer
-
-    def perform_create(self, serializer):
-        user = serializer.save(is_active=False)  # User inactive until email verified
-        self.send_verification_email(self.request, user)
-
-    def send_verification_email(self, request, user):
-        token = default_token_generator.make_token(user)
-        uid = urlsafe_base64_encode(force_bytes(user.pk))
-        domain = get_current_site(request).domain
-        link = f"http://{domain}/api/auth/verify-email/{uid}/{token}/"
-        send_mail(
-            'Verify your email',
-            f'Click the link to verify your email: {link}',
-            settings.DEFAULT_FROM_EMAIL,
-            [user.email],
-            fail_silently=False,
-        )
-
-class VerifyEmailView(APIView):
-    permission_classes = (permissions.AllowAny,)
-
-    def get(self, request, uidb64, token):
-        try:
-            uid = force_str(urlsafe_base64_decode(uidb64))
-            user = User.objects.get(pk=uid)
-        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
-            return Response({'detail': 'Invalid link.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        if user.is_email_verified:
-            return Response({'detail': 'Email already verified.'})
-
-        if default_token_generator.check_token(user, token):
-            user.is_active = True
-            user.is_email_verified = True
-            user.save()
-            return Response({'detail': 'Email verified successfully.'})
-        else:
-            return Response({'detail': 'Invalid or expired token.'}, status=status.HTTP_400_BAD_REQUEST)
-
-class UserMeView(generics.RetrieveAPIView):
-    serializer_class = UserSerializer
-    permission_classes = (permissions.IsAuthenticated,)
-
-    def get_object(self):
-        return self.request.user
-
-class UserProfileView(generics.RetrieveAPIView):
-    serializer_class = UserProfileSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get_object(self):
-        return self.request.user
-
-class PasswordChangeView(generics.UpdateAPIView):
-    serializer_class = PasswordChangeSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get_object(self):
-        return self.request.user
-
-    def update(self, request, *args, **kwargs):
-        user = self.get_object()
+    permission_classes = [AllowAny]
+    
+    def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        if not user.check_password(serializer.validated_data['old_password']):
-            return Response({'old_password': ['Wrong password.']}, status=status.HTTP_400_BAD_REQUEST)
-        user.set_password(serializer.validated_data['new_password'])
-        user.save()
-        return Response({'detail': 'Password updated successfully.'})
+        if serializer.is_valid():
+            user = serializer.save()
+            return Response({
+                'message': 'User created successfully',
+                'user': UserSerializer(user).data
+            }, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def login(request):
+    serializer = LoginSerializer(data=request.data)
+    if serializer.is_valid():
+        user = serializer.validated_data['user']
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+            'user': UserSerializer(user).data
+        })
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class UserProfileView(generics.RetrieveUpdateAPIView):
+    """RESTful endpoint for user profile - handles both GET and PUT"""
+    serializer_class = UserProfileSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_object(self):
+        return self.request.user
+    
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        
+        if serializer.is_valid():
+            serializer.save()
+            return Response({
+                'message': 'Profile updated successfully',
+                'user': serializer.data
+            })
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def change_password(request):
+    serializer = PasswordChangeSerializer(data=request.data)
+    if serializer.is_valid():
+        user = request.user
+        if user.check_password(serializer.validated_data['old_password']):
+            user.set_password(serializer.validated_data['new_password'])
+            user.save()
+            update_session_auth_hash(request, user)
+            return Response({'message': 'Password changed successfully'})
+        return Response({'error': 'Invalid old password'}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def user_dashboard(request):
+    enrollments = Enrollment.objects.filter(user=request.user)
+    enrolled_courses = enrollments.count()
+    
+    # Calculate completed courses
+    completed_courses = 0
+    in_progress_courses = 0
+    
+    for enrollment in enrollments:
+        total_lessons = enrollment.course.lessons.count()
+        completed_lessons = Progress.objects.filter(
+            enrollment=enrollment, completed=True
+        ).count()
+        
+        if total_lessons > 0 and completed_lessons == total_lessons:
+            completed_courses += 1
+        elif completed_lessons > 0:
+            in_progress_courses += 1
+    
+    certificates_earned = Certificate.objects.filter(user=request.user).count()
+    
+    # Recent courses
+    recent_courses = []
+    for enrollment in enrollments.order_by('-last_accessed')[:5]:
+        course = enrollment.course
+        total_lessons = course.lessons.count()
+        completed_lessons = Progress.objects.filter(
+            enrollment=enrollment, completed=True
+        ).count()
+        progress = (completed_lessons / total_lessons * 100) if total_lessons > 0 else 0
+        
+        recent_courses.append({
+            'id': course.id,
+            'title': course.title,
+            'progress': progress,
+            'last_accessed': enrollment.last_accessed,
+            'instructor': course.instructor_name
+        })
+    
+    return Response({
+        'stats': {
+            'enrolled_courses': enrolled_courses,
+            'completed_courses': completed_courses,
+            'in_progress_courses': in_progress_courses,
+            'certificates_earned': certificates_earned
+        },
+        'recent_courses': recent_courses
+    })

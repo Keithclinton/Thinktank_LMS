@@ -2,11 +2,11 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 
 class User(AbstractUser):
-    ROLE_CHOICES = (
-        ('student', 'Student'),
-        ('instructor', 'Instructor'),
-        ('admin', 'Admin'),
-    )
-    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='student')
-    is_email_verified = models.BooleanField(default=False)
-    bio = models.TextField(null=True, blank=True)
+    email = models.EmailField(unique=True)
+    is_email_verified = models.BooleanField(default=False)  # Add this field
+    
+    USERNAME_FIELD = 'email'
+    REQUIRED_FIELDS = ['username']
+    
+    def __str__(self):
+        return self.email
