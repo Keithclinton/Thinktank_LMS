@@ -16,6 +16,7 @@ db.sqlite3
 .env
 *.env
 .env.*
+venv
 
 # VS Code
 .vscode/
