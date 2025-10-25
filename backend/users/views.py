@@ -1,5 +1,6 @@
 from courses.models import Certificate, Enrollment, Progress
 from django.contrib.auth import get_user_model, update_session_auth_hash
+from drf_spectacular.utils import extend_schema
 from rest_framework import generics, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -36,6 +37,7 @@ class RegisterView(generics.CreateAPIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+@extend_schema(request=LoginSerializer)
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def login(request):
