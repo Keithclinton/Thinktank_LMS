@@ -70,6 +70,7 @@ INSTALLED_APPS = [
     "dj_rest_auth",
     "social_django",
     "storages",  # Add this for GCS
+    "drf_spectacular",
     # Local apps
     "users",
     "courses",
@@ -170,6 +171,7 @@ REST_FRAMEWORK = {
         "rest_framework.renderers.JSONRenderer",
         "rest_framework.renderers.BrowsableAPIRenderer",  # ADD THIS LINE
     ],
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 
 # JWT Configuration
@@ -313,3 +315,18 @@ CORS_ALLOWED_ORIGINS = [
 ]
 
 CORS_ALLOW_CREDENTIALS = True
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "ThinkTank_LMS",
+    "DESCRIPTION": "Think Tank LMS API",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    # Optional UI customizations
+    "SWAGGER_UI_SETTINGS": {
+        "deepLinking": True,
+        "persistAuthorization": True,
+        "displayOperationId": True,
+    },
+    "COMPONENT_SPLIT_REQUEST": True,
+    "DISABLE_ERRORS_AND_WARNINGS": True,
+}
